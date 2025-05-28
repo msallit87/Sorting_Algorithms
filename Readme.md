@@ -1,4 +1,3 @@
-## Overview
 The **Sorting_Algorithms** project is a full-stack application that visualizes common sorting algorithms and provides AI-driven suggestions for the next steps. It consists of:
 
 - **Backend**: A FastAPI service exposing endpoints to perform algorithmic sorts and AI suggestions via server-sent events.
