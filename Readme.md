@@ -6,7 +6,7 @@ The **Sorting_Algorithms** project is a full-stack application that visualizes c
 ## Technologies Used
 
 ### Backend
-- **Python 3.8+**: Core language for API and algorithm implementations.
+- **Python 3.8+**: Core language used for API and algorithm implementations.
 - **FastAPI**: Web framework for building REST and streaming endpoints.
 - **Pydantic**: Data validation and settings management.
 - **HTTPX**: Asynchronous HTTP client for AI suggestion streaming.
