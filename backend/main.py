@@ -1,18 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings
-from pydantic_settings import BaseSettings
+from typing import Optional
+
 from algorithms.sort_manager import SortManager
 from ai_routes import router as ai_router
 
 class Settings(BaseSettings):
-    OPENROUTER_API_KEY: str
+    OPENROUTER_API_KEY: Optional[str] = None
 
-settings = Settings(_env_file=".env")
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+settings = Settings()
 
 app = FastAPI()
 
-# Allow your front-end origins
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,13 +27,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Root health‐check
+# Health-check endpoint
 @app.get("/")
 def health():
     return {"status": "ok"}
 
 # Sorting endpoint
 sort_manager = SortManager()
+
 class SortRequest(BaseModel):
     array: list[int]
 
@@ -35,5 +42,5 @@ class SortRequest(BaseModel):
 def sort_array(algorithm: str, request: SortRequest):
     return sort_manager.sort(algorithm, request.array)
 
-# AI‐suggest endpoint
-app.include_router(ai_router, prefix="")
+# AI-suggestion endpoint
+app.include_router(ai_router)
