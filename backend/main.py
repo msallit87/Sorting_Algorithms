@@ -1,20 +1,17 @@
-# main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseSettings
 from algorithms.sort_manager import SortManager
-from dotenv import load_dotenv
-import os
+from ai_routes import router as ai_router
 
-# Load environment variables from .env file if running locally and not when running on Render
-load_dotenv() if os.getenv("RENDER") is None else None
+class Settings(BaseSettings):
+    OPENAI_API_KEY: str
 
-from ai_routes import router
+settings = Settings(_env_file=".env")
 
 app = FastAPI()
-sort_manager = SortManager()
 
+# Allow your front-end origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,11 +20,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)  # Register the AI route
+# Root health‐check
+@app.get("/")
+def health():
+    return {"status": "ok"}
 
+# Sorting endpoint
+sort_manager = SortManager()
 class SortRequest(BaseModel):
-    array: List[int]
+    array: list[int]
 
 @app.post("/sort/{algorithm}")
 def sort_array(algorithm: str, request: SortRequest):
     return sort_manager.sort(algorithm, request.array)
+
+# AI‐suggest endpoint
+app.include_router(ai_router, prefix="")

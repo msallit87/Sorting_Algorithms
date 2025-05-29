@@ -15,17 +15,36 @@ function App() {
   const [explanation, setExplanation] = useState('');
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [challengeMode, setChallengeMode] = useState(true);
-  const [userGuess, setUserGuess] = useState('');
   const [feedback, setFeedback] = useState('');
   const [stepHistory, setStepHistory] = useState([]);
   const [aiSuggestion, setAiSuggestion] = useState('');
   const [isLoadingAI, setIsLoadingAI] = useState(false);
 
-  // Use one env var for both dev and prod
-  const API_BASE =
-    process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  // Single base‐URL for both dev and prod:
+  const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8000';
 
+  // Validate and parse user input
+  const parseInput = () => {
+    const parts = array
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s !== '');
+    const nums = parts.map(Number);
+    if (parts.length === 0 || nums.some(isNaN)) {
+      alert('Please enter a valid comma-separated list of numbers.');
+      throw new Error('Invalid input');
+    }
+    return nums;
+  };
+
+  // Stream AI suggestion
   const handleAISuggestion = async () => {
+    let parsedArray;
+    try {
+      parsedArray = parseInput();
+    } catch {
+      return;
+    }
     setSteps([]);
     setMetrics(null);
     setCurrentArray([]);
@@ -35,24 +54,16 @@ function App() {
     setIsLoadingAI(true);
 
     try {
-      const parsedArray = array.split(',').map(Number);
-      const response = await fetch(
-        `${API_BASE}/ai-suggest`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ array: parsedArray }),
-        }
-      );
+      const res = await fetch(`${API_BASE}/ai-suggest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ array: parsedArray }),
+      });
+      if (!res.ok) throw new Error(`Status ${res.status}`);
 
-      if (!response.ok) {
-        throw new Error(`AI suggest failed: ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
+      const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-
       while (!done) {
         const { value, done: streamDone } = await reader.read();
         done = streamDone;
@@ -66,33 +77,35 @@ function App() {
               try {
                 const parsed = JSON.parse(line.replace('data: ', ''));
                 const delta = parsed.choices?.[0]?.delta?.content;
-                if (delta) {
-                  setAiSuggestion(prev => prev + delta);
-                }
-              } catch (err) {
-                console.error('Chunk parse error:', err, line);
+                if (delta) setAiSuggestion(prev => prev + delta);
+              } catch (e) {
+                console.error('Chunk parse err:', e, line);
               }
             });
         }
       }
-    } catch (err) {
-      console.error('AI fetch error:', err);
+    } catch (e) {
+      console.error('AI error:', e);
       setAiSuggestion('⚠️ Error fetching suggestion.');
     } finally {
       setIsLoadingAI(false);
     }
   };
 
+  // Run the sort
   const handleSort = async () => {
+    let parsedArray;
+    try {
+      parsedArray = parseInput();
+    } catch {
+      return;
+    }
     setAiSuggestion('');
-    const parsedArray = array.split(',').map(Number);
-
     try {
       const { data } = await axios.post(
         `${API_BASE}/sort/${algorithm}`,
         { array: parsedArray }
       );
-
       setSteps(data.steps);
       setMetrics(data.metrics);
       setCurrentArray(parsedArray);
@@ -101,39 +114,34 @@ function App() {
       setFeedback('');
       setHighlight([]);
       setStepHistory([]);
-    } catch (err) {
-      console.error('Sort API error:', err);
-      alert('Sorting failed. Check console for details.');
+    } catch (e) {
+      console.error('Sort API error:', e);
+      setSteps([]);
+      setMetrics(null);
+      alert('Failed to sort. Check console for details.');
     }
   };
 
+  // Narrative autoplay
   useEffect(() => {
-    if (
-      steps.length > 0 &&
-      currentStep < steps.length &&
-      !challengeMode
-    ) {
-      const timer = setTimeout(() => {
+    if (steps.length && currentStep < steps.length && !challengeMode) {
+      const t = setTimeout(() => {
         const step = steps[currentStep];
-        applyStep(step);
-        setStepHistory(prev => [...prev, step]);
-        setCurrentStep(prev => prev + 1);
+        setExplanation(step.explanation || '');
+        if (step.type === 'swap' && step.array) {
+          setCurrentArray(step.array);
+          setHighlight(step.indices);
+        } else if (step.type === 'compare') {
+          setHighlight(step.indices || []);
+        } else {
+          setHighlight([]);
+        }
+        setStepHistory(h => [...h, step]);
+        setCurrentStep(i => i + 1);
       }, 1000);
-      return () => clearTimeout(timer);
+      return () => clearTimeout(t);
     }
   }, [steps, currentStep, challengeMode]);
-
-  const applyStep = step => {
-    setExplanation(step.explanation || '');
-    if (step.type === 'swap' && step.array) {
-      setCurrentArray(step.array);
-      setHighlight(step.indices);
-    } else if (step.type === 'compare') {
-      setHighlight(step.indices || []);
-    } else {
-      setHighlight([]);
-    }
-  };
 
   const formatStep = step => {
     const [a, b] = step.indices || step.values || [];
@@ -141,11 +149,11 @@ function App() {
     const bv = currentArray[b] ?? b;
     switch (step.type) {
       case 'compare':
-        return `Compare index ${a} (${av}) with index ${b} (${bv})`;
+        return `Compare index ${a} (${av}) vs ${b} (${bv})`;
       case 'swap':
-        return `Swap index ${a} (${av}) with index ${b} (${bv})`;
+        return `Swap index ${a} (${av}) ↔ ${b} (${bv})`;
       case 'insert':
-        return `Insert value ${av} at index ${a}`;
+        return `Insert ${av} at index ${a}`;
       default:
         return step.type;
     }
@@ -153,38 +161,33 @@ function App() {
 
   const handleGuess = guess => {
     const expected = steps[currentStep];
-    const guessClean = guess.replace(/\s/g, '').toLowerCase();
-    const expectedStr = `${expected.type}[${(
-      expected.indices || expected.values || []
-    ).join(',')}]`;
-    if (guessClean === expectedStr) {
+    const clean = guess.replace(/\s/g, '').toLowerCase();
+    const expStr = `${expected.type}[${(expected.indices || expected.values || []).join(',')}]`;
+    if (clean === expStr) {
       setFeedback('Correct!');
-      applyStep(expected);
-      setStepHistory(prev => [...prev, expected]);
-      setCurrentStep(prev => prev + 1);
+      setStepHistory(h => [...h, expected]);
+      setCurrentStep(i => i + 1);
     } else {
-      setFeedback(`Incorrect. Expected: ${expectedStr}`);
+      setFeedback(`Incorrect. Expected: ${expStr}`);
     }
   };
 
   return (
     <div style={{ fontFamily: 'Arial', margin: '2rem' }}>
-      <h1 style={{ fontSize: '2rem' }}>
-        Sorting_Algorithms – Visualizer
-      </h1>
+      <h1 style={{ fontSize: '2rem' }}>Sorting Visualizer</h1>
 
       <input
-        style={{ padding: '0.5rem', width: '300px' }}
         type="text"
+        placeholder="e.g. 5,3,1,4"
         value={array}
         onChange={e => setArray(e.target.value)}
-        placeholder="Enter comma-separated numbers"
+        style={{ padding: '0.5rem', width: '300px' }}
       />
 
       <select
-        style={{ padding: '0.5rem', marginLeft: '1rem' }}
         value={algorithm}
         onChange={e => setAlgorithm(e.target.value)}
+        style={{ marginLeft: '1rem', padding: '0.5rem' }}
       >
         <option value="bubble">Bubble Sort</option>
         <option value="merge">Merge Sort</option>
@@ -196,73 +199,50 @@ function App() {
         <input
           type="checkbox"
           checked={challengeMode}
-          onChange={() => setChallengeMode(!challengeMode)}
-        />{' '}
-        Challenge Mode
+          onChange={() => setChallengeMode(m => !m)}
+        /> Challenge
       </label>
 
       <label style={{ marginLeft: '1rem' }}>
         <input
           type="checkbox"
           checked={ttsEnabled}
-          onChange={() => setTtsEnabled(!ttsEnabled)}
-        />{' '}
-        Narrative Mode
+          onChange={() => setTtsEnabled(t => !t)}
+        /> Narrative
       </label>
 
       <button
         onClick={handleAISuggestion}
         disabled={isLoadingAI}
         style={{
-          padding: '0.5rem 1rem',
           marginLeft: '1rem',
+          padding: '0.5rem 1rem',
           opacity: isLoadingAI ? 0.6 : 1,
           cursor: isLoadingAI ? 'not-allowed' : 'pointer',
         }}
       >
-        {isLoadingAI ? 'Optimizing...' : 'Suggest (AI)'}
+        {isLoadingAI ? 'Optimizing…' : 'AI Suggest'}
       </button>
 
       <button
-        style={{ padding: '0.5rem 1rem', marginLeft: '1rem' }}
         onClick={handleSort}
+        style={{ marginLeft: '1rem', padding: '0.5rem 1rem' }}
       >
         Sort
       </button>
 
       {aiSuggestion && (
-        <div
-          style={{
-            marginTop: '1rem',
-            padding: '1rem',
-            background: '#f5f5f5',
-            borderRadius: '5px',
-          }}
-        >
+        <div style={{ marginTop: '1rem', padding: '1rem', background: '#f5f5f5' }}>
           <h3>AI Suggestion:</h3>
-          <pre style={{ whiteSpace: 'pre-wrap' }}>
-            {aiSuggestion}
-          </pre>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>{aiSuggestion}</pre>
         </div>
       )}
 
       {metrics && (
         <div style={{ marginTop: '1rem' }}>
-          {metrics.comparisons != null && (
-            <p>
-              <strong>Comparisons:</strong> {metrics.comparisons}
-            </p>
-          )}
-          {metrics.swaps != null && (
-            <p>
-              <strong>Swaps:</strong> {metrics.swaps}
-            </p>
-          )}
-          {metrics.time != null && (
-            <p>
-              <strong>Time:</strong> {metrics.time.toFixed(2)} ms
-            </p>
-          )}
+          {metrics.comparisons != null && <p><strong>Comparisons:</strong> {metrics.comparisons}</p>}
+          {metrics.swaps != null && <p><strong>Swaps:</strong> {metrics.swaps}</p>}
+          {metrics.time != null && <p><strong>Time:</strong> {metrics.time.toFixed(2)} ms</p>}
         </div>
       )}
 
@@ -277,34 +257,17 @@ function App() {
 
       {!ttsEnabled && stepHistory.length > 0 && (
         <div style={{ marginTop: '1rem' }}>
-          <h3>Steps:</h3>
-          <ul>
-            {stepHistory.map((s, i) => (
-              <li key={i}>{formatStep(s)}</li>
-            ))}
-          </ul>
+          <h3>Steps</h3>
+          <ul>{stepHistory.map((s, i) => <li key={i}>{formatStep(s)}</li>)}</ul>
         </div>
       )}
 
-      {challengeMode &&
-        steps.length > 0 &&
-        currentStep < steps.length && (
-          <Challenge
-            currentStep={steps[currentStep]}
-            onGuess={handleGuess}
-          />
-        )}
+      {challengeMode && steps.length > 0 && currentStep < steps.length && (
+        <Challenge currentStep={steps[currentStep]} onGuess={handleGuess} />
+      )}
 
       {feedback && (
-        <div
-          style={{
-            marginTop: '1rem',
-            fontWeight: 'bold',
-            color: feedback.startsWith('Correct')
-              ? 'green'
-              : 'red',
-          }}
-        >
+        <div style={{ marginTop: '1rem', color: feedback.startsWith('Correct') ? 'green' : 'red' }}>
           {feedback}
         </div>
       )}
