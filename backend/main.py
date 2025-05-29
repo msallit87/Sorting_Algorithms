@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings
 from algorithms.sort_manager import SortManager
 from ai_routes import router as ai_router
 
 class Settings(BaseSettings):
-    OPENAI_API_KEY: str
+    OPENROUTER_API_KEY: str
 
 settings = Settings(_env_file=".env")
 
