@@ -45,13 +45,16 @@ function App() {
     } catch {
       return;
     }
-    setSteps([]);
-    setMetrics(null);
-    setCurrentArray([]);
-    setCurrentStep(0);
-    setExplanation('');
-    setAiSuggestion('');
-    setIsLoadingAI(true);
+    // Clear out the old sort animation & history:
+     setSteps([]);
+     setMetrics(null);
+     setCurrentArray([]);
+     setCurrentStep(0);
+     setHighlight([]);
+     setStepHistory([]);
+     setExplanation('');
+     setAiSuggestion('');
+     setIsLoadingAI(true);
 
     try {
       const res = await fetch(`${API_BASE}/ai-suggest`, {
@@ -86,7 +89,7 @@ function App() {
       }
     } catch (e) {
       console.error('AI error:', e);
-      setAiSuggestion('⚠️ Error fetching suggestion.');
+      setAiSuggestion('Error fetching suggestion.');
     } finally {
       setIsLoadingAI(false);
     }
@@ -221,7 +224,7 @@ function App() {
           cursor: isLoadingAI ? 'not-allowed' : 'pointer',
         }}
       >
-        {isLoadingAI ? 'Optimizing…' : 'AI Suggest'}
+        {isLoadingAI ? 'Optimizing…' : 'AI-Suggest Best Sorting Algorithm'}
       </button>
 
       <button
@@ -233,7 +236,7 @@ function App() {
 
       {aiSuggestion && (
         <div style={{ marginTop: '1rem', padding: '1rem', background: '#f5f5f5' }}>
-          <h3>AI Suggestion:</h3>
+          <h3>AI-Suggest Best Sorting Algorithm:</h3>
           <pre style={{ whiteSpace: 'pre-wrap' }}>{aiSuggestion}</pre>
         </div>
       )}

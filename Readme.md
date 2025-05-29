@@ -225,7 +225,7 @@ They mirror the class-based implementations, returning the same dict structure.
 - **JSX Layout**:
   1. Text input for the array.
   2. Dropdown select for algorithm.
-  3. Buttons: “Sort”, “AI Suggest”.
+  3. Buttons: “Sort”, “AI-Suggest Best Sorting Algorithm”.
   4. Mode toggles: Challenge, Narrative.
   5. Metrics display.
   6. `<VisualBars>` for graphical array.
